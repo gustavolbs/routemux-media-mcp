@@ -72,13 +72,13 @@ async function imageResult(env: Env, origin: string, bytes: Uint8Array): Promise
 
 function createServer(env: Env, origin: string) {
   const server = new McpServer(
-    { name: "routemux-media", version: "1.3.0" },
+    { name: "routemux-media", version: "1.4.0" },
     {
       instructions: [
-        "These tools cannot see images the user attaches in the chat: edit_image needs an image URL.",
+        "These tools cannot see images the user attaches in the chat: edit_image and create_video need image URLs.",
         "When the user attaches an image, upload it yourself if you have a code execution sandbox: call get_upload_link, then run",
         '`curl -sS -F "file=@<path to the attachment>" "<upload link>"` (attachments are usually under /mnt/user-data/uploads)',
-        "and use the `url` field of the JSON reply as image_url. The upload takes PNG, JPEG or WebP up to 10 MB, so convert or downscale first if needed.",
+        "and use the `url` field of the JSON reply as the image URL. The upload takes PNG, JPEG or WebP up to 10 MB, so convert or downscale first if needed.",
         "Only when you have no sandbox, cannot read the file, or the request is blocked, give the user the upload link and ask them to paste back the URL the page returns.",
       ].join(" "),
     },
@@ -141,7 +141,7 @@ function createServer(env: Env, origin: string) {
     "get_upload_link",
     {
       description:
-        'Return the upload link, used to turn an image attached in the chat into a URL for edit_image. Preferred: upload the attachment yourself from your code execution sandbox with `curl -sS -F "file=@<path>" "<link>"`; the JSON reply has the `url`. Fallback: the same link opens a page where the user can upload the photo and copy the URL. The link contains a secret, so only show it to the user when they need the fallback.',
+        'Return the upload link, used to turn an image attached in the chat into a URL for edit_image or create_video. Preferred: upload the attachment yourself from your code execution sandbox with `curl -sS -F "file=@<path>" "<link>"`; the JSON reply has the `url`. Fallback: the same link opens a page where the user can upload the photo and copy the URL. The link contains a secret, so only show it to the user when they need the fallback.',
       inputSchema: {},
     },
     async () => text(`${origin}/upload/${env.SECRET}`),

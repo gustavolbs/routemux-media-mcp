@@ -11,7 +11,7 @@ inclusive no celular.
 | `generate_image(prompt, model?, size?, quality?)` | Gera uma imagem. `model`: `flare` (padrão), `sunburst` (mais preciso) ou `flux` (quase grátis, para imagens simples). |
 | `edit_image(prompt, image_url, model?)` | Edita uma imagem a partir de uma URL. Padrão `sunburst`. |
 | `get_upload_link()` | Devolve o link de upload, usado para transformar uma foto anexada no chat em URL. |
-| `create_video(prompt, model?, seconds?, size?, ratio?)` | Cria um job de vídeo (texto→vídeo) e devolve na hora o `job_id` e o custo estimado. |
+| `create_video(prompt, model?, seconds?, size?, ratio?, first_frame_url?, last_frame_url?, reference_image_urls?)` | Cria um job de vídeo (texto→vídeo ou imagem→vídeo) e devolve na hora o `job_id` e o custo estimado. |
 | `get_video(job_id)` | Consulta o job. Quando termina, salva o MP4 no R2 e devolve a URL. |
 
 As imagens e os vídeos ficam no R2 com chave aleatória longa e são servidos pelo próprio Worker
@@ -38,15 +38,17 @@ falha em vez de cobrar. Ele erra texto dentro da imagem e não é usado na ediç
 | `seconds` | 6 (padrão) ou 10 | 4 a 15 (padrão 5) |
 | `size` | `768P` (padrão) ou `1080P` (só com 6 s) | `768P` (padrão) ou `2K` |
 | `ratio` | não tem | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9` |
+| Imagens | só primeiro frame | primeiro frame, primeiro + último frame, ou até 5 referências (sem misturar com frames) |
 | Custo | US$ 0,056 (768P, 6 s), US$ 0,112 (10 s ou 1080P) | US$ 0,08/s em 768P, US$ 0,13/s em 2K |
 
 O vídeo é assíncrono: `create_video` devolve o `job_id` e o Claude consulta `get_video` até
 ficar pronto (alguns minutos). Um job que falha não é cobrado. Depois de salvo, `get_video`
 devolve sempre a mesma URL, sem baixar de novo.
 
-Só texto→vídeo: a API da RouteMux ainda não aceita imagem (primeiro frame, último frame,
-referências) nesses modelos. Ela recusa multipart e ignora campos de imagem no JSON, gerando e
-cobrando um vídeo só de texto.
+As imagens vão como URL pública (PNG, JPG ou WebP, até 10 MB), por exemplo as do
+`generate_image`, do `edit_image` ou do `/upload`. Com imagem no H3, deixe `ratio` de fora para o
+vídeo seguir o formato da imagem. Se o modelo não aceitar a entrada, a RouteMux devolve um erro
+400 e não cobra.
 
 ## Setup
 
