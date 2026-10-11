@@ -5,6 +5,7 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "routemux-images" }],
+  "ai": { "binding": "AI" },
   "vars": { "ROUTEMUX_BASE_URL": "https://api.routemux.com/v1" },
   // Off on purpose: invocation logs record the request URL, and the URL carries SECRET.
   "observability": { "enabled": false }

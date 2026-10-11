@@ -21,6 +21,8 @@ const MODELS = {
   sunburst: "openai/gpt-image-2.5-sunburst",
 } as const;
 
+const FLUX_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
+
 // Above this the base64 block gets too heavy for a chat tool result, so only the URL is returned.
 const MAX_INLINE_BYTES = 700 * 1024;
 
@@ -44,6 +46,21 @@ async function requestImage(env: Env, path: string, init: RequestInit): Promise<
   throw new Error("RouteMux returned no image.");
 }
 
+// FLUX.2 klein on Workers AI: nearly free, good for simple images, weak at text.
+async function requestFluxImage(env: Env, prompt: string, size?: string): Promise<Uint8Array> {
+  const [width, height] = size && /^\d+x\d+$/.test(size) ? size.split("x") : ["1024", "1024"];
+  const form = new FormData();
+  form.append("prompt", prompt);
+  form.append("width", width);
+  form.append("height", height);
+  // Workers AI takes this model's input as a multipart body.
+  const encoded = new Response(form);
+  const input = { multipart: { body: encoded.body, contentType: encoded.headers.get("Content-Type") } };
+  const output = (await env.AI.run(FLUX_MODEL as never, input as never)) as { image?: string };
+  if (!output.image) throw new Error("Workers AI returned no image.");
+  return new Uint8Array(Buffer.from(output.image, "base64"));
+}
+
 async function imageResult(env: Env, origin: string, bytes: Uint8Array): Promise<ToolResult> {
   const { url, mime } = await saveImage(env, origin, bytes);
   const result = text(url);
@@ -55,7 +72,7 @@ async function imageResult(env: Env, origin: string, bytes: Uint8Array): Promise
 
 function createServer(env: Env, origin: string) {
   const server = new McpServer(
-    { name: "routemux-media", version: "1.2.0" },
+    { name: "routemux-media", version: "1.3.0" },
     {
       instructions: [
         "These tools cannot see images the user attaches in the chat: edit_image needs an image URL.",
@@ -70,20 +87,25 @@ function createServer(env: Env, origin: string) {
   server.registerTool(
     "generate_image",
     {
-      description:
+      description: [
         "Generate an image from a text prompt. Returns a public URL (and the image inline when small enough). Takes up to a minute.",
+        'Choosing the model: use "flux" for simple images with no text in them, such as illustrations, coloring pages, line art, backgrounds and quick drafts; it is nearly free.',
+        'Use "flare" for anything with text or lettering, logos, precise layouts, realistic people, or when the user wants the best result; it costs about US$ 0.02 per image.',
+        '"sunburst" costs the same as flare and is slower but more precise.',
+      ].join(" "),
       inputSchema: {
         prompt: z.string().describe("What to draw."),
-        model: z.enum(["flare", "sunburst"]).default("flare").describe("flare is fast, sunburst is more precise."),
+        model: z.enum(["flare", "sunburst", "flux"]).default("flare"),
         size: z
           .string()
           .optional()
           .describe('Optional shape: "1024x1024" (square), "1536x1024" (landscape), "1024x1536" (portrait) or "auto". The returned image can be larger.'),
-        quality: z.string().optional().describe('Optional, e.g. "low", "medium", "high" or "auto".'),
+        quality: z.string().optional().describe('Optional, e.g. "low", "medium", "high" or "auto". Ignored by flux.'),
       },
     },
     ({ prompt, model, size, quality }) =>
       asToolResult(async () => {
+        if (model === "flux") return imageResult(env, origin, await requestFluxImage(env, prompt, size));
         const bytes = await requestImage(env, "/images/generations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

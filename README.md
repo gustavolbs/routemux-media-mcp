@@ -8,7 +8,7 @@ inclusive no celular.
 
 | Tool | O que faz |
 |---|---|
-| `generate_image(prompt, model?, size?, quality?)` | Gera uma imagem. `model`: `flare` (padrão, rápido) ou `sunburst` (mais preciso). |
+| `generate_image(prompt, model?, size?, quality?)` | Gera uma imagem. `model`: `flare` (padrão), `sunburst` (mais preciso) ou `flux` (quase grátis, para imagens simples). |
 | `edit_image(prompt, image_url, model?)` | Edita uma imagem a partir de uma URL. Padrão `sunburst`. |
 | `get_upload_link()` | Devolve o link de upload, usado para transformar uma foto anexada no chat em URL. |
 | `create_video(prompt, model?, seconds?, size?, ratio?)` | Cria um job de vídeo (texto→vídeo) e devolve na hora o `job_id` e o custo estimado. |
@@ -16,6 +16,19 @@ inclusive no celular.
 
 As imagens e os vídeos ficam no R2 com chave aleatória longa e são servidos pelo próprio Worker
 em `/img/<key>` e `/vid/<key>` (com suporte a Range). Imagens pequenas também voltam inline no chat.
+
+### Modelos de imagem
+
+| `model` | Onde roda | Custo | Para quê |
+|---|---|---|---|
+| `flare` (padrão) | GPT Image 2.5 na RouteMux | US$ 0,0186 | Texto na imagem, logos, layouts precisos, resultado final |
+| `sunburst` | GPT Image 2.5 na RouteMux | US$ 0,0186 | Igual ao flare, mais lento e mais preciso; padrão da edição |
+| `flux` | FLUX.2 klein no Workers AI | ~104 neurons (~US$ 0,001) | Imagens simples sem texto: ilustrações, desenhos para colorir, rascunhos |
+
+Quem escolhe é o Claude, seguindo a descrição da tool e o que você pedir ("usa o flux", "faz um
+rascunho"). Não há troca automática entre modelos. O `flux` usa a cota do Workers AI: 10.000
+neurons grátis por dia (umas 96 imagens 1024x1024); passando disso, no plano gratuito a chamada
+falha em vez de cobrar. Ele erra texto dentro da imagem e não é usado na edição.
 
 ### Vídeo
 
