@@ -9,6 +9,7 @@ import {
   asToolResult,
   loadSourceImage,
   randomKey,
+  routemuxDownload,
   routemuxFetch,
   sniffImageType,
   text,
@@ -19,6 +20,7 @@ import { registerVideoTools, serveVideo } from "./video";
 const MODELS = {
   flare: "openai/gpt-image-2.5-flare",
   sunburst: "openai/gpt-image-2.5-sunburst",
+  minimax: "minimax/image-01",
 } as const;
 
 const FLUX_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
@@ -40,7 +42,8 @@ async function requestImage(env: Env, path: string, init: RequestInit): Promise<
   const item = ((await res.json()) as { data?: Array<{ url?: string; b64_json?: string }> }).data?.[0];
   if (item?.b64_json) return new Uint8Array(Buffer.from(item.b64_json, "base64"));
   if (item?.url) {
-    const img = await fetch(item.url);
+    const hosted = item.url.startsWith(new URL(env.ROUTEMUX_BASE_URL).origin);
+    const img = hosted ? await routemuxDownload(env, item.url) : await fetch(item.url);
     if (!img.ok) throw new Error(`Could not download the generated image (HTTP ${img.status}).`);
     return new Uint8Array(await img.arrayBuffer());
   }
@@ -91,7 +94,7 @@ async function imageResult(env: Env, origin: string, bytes: Uint8Array): Promise
 
 function createServer(env: Env, origin: string) {
   const server = new McpServer(
-    { name: "routemux-media", version: "1.5.0" },
+    { name: "routemux-media", version: "1.6.0" },
     {
       instructions: [
         "These tools cannot see images the user attaches in the chat: edit_image and create_video need image URLs.",
@@ -108,13 +111,14 @@ function createServer(env: Env, origin: string) {
     {
       description: [
         "Generate an image from a text prompt. Returns the image inline (a preview when the original is large) plus the public URL of the full-size file. Takes up to a minute.",
-        'Choosing the model: use "flux" for simple images with no text in them, such as illustrations, coloring pages, line art, backgrounds and quick drafts; it is nearly free.',
-        'Use "flare" for anything with text or lettering, logos, precise layouts, realistic people, or when the user wants the best result; it costs about US$ 0.02 per image.',
+        'Choosing the model: use "minimax" for realistic photos (portraits, products, interiors, landscapes) and illustrations that have no text or only a short title of a few words; it costs about US$ 0.0007 per image.',
+        'Use "flux" for coloring pages, line art and other simple drawings with no text; it is nearly free.',
+        'Use "flare" for anything with sentences or accented text, logos, precise layouts, or when the user wants the best result; it costs about US$ 0.02 per image.',
         '"sunburst" costs the same as flare and is slower but more precise.',
       ].join(" "),
       inputSchema: {
         prompt: z.string().describe("What to draw."),
-        model: z.enum(["flare", "sunburst", "flux"]).default("flare"),
+        model: z.enum(["flare", "sunburst", "flux", "minimax"]).default("flare"),
         size: z
           .string()
           .optional()

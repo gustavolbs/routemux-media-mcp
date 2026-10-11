@@ -8,7 +8,7 @@ inclusive no celular.
 
 | Tool | O que faz |
 |---|---|
-| `generate_image(prompt, model?, size?, quality?)` | Gera uma imagem. `model`: `flare` (padrão), `sunburst` (mais preciso) ou `flux` (quase grátis, para imagens simples). |
+| `generate_image(prompt, model?, size?, quality?)` | Gera uma imagem. `model`: `flare` (padrão), `sunburst`, `minimax` ou `flux`; veja a tabela abaixo. |
 | `edit_image(prompt, image_url, model?)` | Edita uma imagem a partir de uma URL. Padrão `sunburst`. |
 | `get_upload_link()` | Devolve o link de upload, usado para transformar uma foto anexada no chat em URL. |
 | `create_video(prompt, model?, seconds?, size?, ratio?, first_frame_url?, last_frame_url?, reference_image_urls?)` | Cria um job de vídeo (texto→vídeo ou imagem→vídeo) e devolve na hora o `job_id` e o custo estimado. |
@@ -25,12 +25,16 @@ quando o original passa de 700 KB, vai uma prévia JPEG de até 1024 px feita pe
 |---|---|---|---|
 | `flare` (padrão) | GPT Image 2.5 na RouteMux | US$ 0,0186 | Texto na imagem, logos, layouts precisos, resultado final |
 | `sunburst` | GPT Image 2.5 na RouteMux | US$ 0,0186 | Igual ao flare, mais lento e mais preciso; padrão da edição |
+| `minimax` | MiniMax Image-01 na RouteMux | US$ 0,0007 | Fotos realistas (retratos, produtos, interiores) e ilustrações; só acerta títulos curtos |
 | `flux` | FLUX.2 klein no Workers AI | ~104 neurons (~US$ 0,001) | Imagens simples sem texto: ilustrações, desenhos para colorir, rascunhos |
 
 Quem escolhe é o Claude, seguindo a descrição da tool e o que você pedir ("usa o flux", "faz um
 rascunho"). Não há troca automática entre modelos. O `flux` usa a cota do Workers AI: 10.000
 neurons grátis por dia (umas 96 imagens 1024x1024); passando disso, no plano gratuito a chamada
 falha em vez de cobrar. Ele erra texto dentro da imagem e não é usado na edição.
+
+O `minimax` também não edita: a RouteMux recusa o modelo em `/images/edits` e ignora imagens de
+referência na geração. A edição continua só com `flare` e `sunburst`.
 
 ### Vídeo
 

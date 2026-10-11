@@ -58,6 +58,15 @@ export async function routemuxFetch(env: Env, path: string, init: RequestInit = 
   return res;
 }
 
+// Downloads a file hosted by RouteMux: the first hop needs the key and redirects to a signed
+// URL that must not get it.
+export async function routemuxDownload(env: Env, url: string): Promise<Response> {
+  let res = await fetch(url, { headers: { Authorization: `Bearer ${env.ROUTEMUX_KEY}` }, redirect: "manual" });
+  const location = res.headers.get("Location");
+  if (res.status >= 300 && res.status < 400 && location) res = await fetch(new URL(location, url));
+  return res;
+}
+
 export async function loadSourceImage(env: Env, origin: string, imageUrl: string): Promise<File> {
   const url = new URL(imageUrl);
   let bytes: Uint8Array;

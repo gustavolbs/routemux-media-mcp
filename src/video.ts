@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { type Env, type ToolResult, asToolResult, randomKey, routemuxFetch, text } from "./lib";
+import { type Env, type ToolResult, asToolResult, randomKey, routemuxDownload, routemuxFetch, text } from "./lib";
 
 const VIDEO_MODELS = {
   hailuo: "minimax/minimax-hailuo-2.3",
@@ -139,10 +139,7 @@ async function getVideo(env: Env, origin: string, jobId: string): Promise<ToolRe
   };
 
   if (job.status === "completed") {
-    // The content endpoint may redirect to a signed URL; follow it by hand so the key is not sent there.
-    let res = await routemuxFetch(env, `/videos/${jobId}/content`, { redirect: "manual" });
-    const location = res.headers.get("Location");
-    if (res.status >= 300 && location) res = await fetch(new URL(location, env.ROUTEMUX_BASE_URL));
+    const res = await routemuxDownload(env, `${env.ROUTEMUX_BASE_URL}/videos/${jobId}/content`);
     if (!res.ok || !res.body || res.headers.get("Content-Type")?.includes("json")) {
       throw new Error(`The video is ready but could not be downloaded (HTTP ${res.status}). Try get_video again.`);
     }
