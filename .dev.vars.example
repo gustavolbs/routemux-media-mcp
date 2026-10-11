@@ -1,0 +1,3 @@
+# Copy to .dev.vars for `wrangler dev`. Never commit the real file.
+SECRET=change-me-to-a-long-random-string
+ROUTEMUX_KEY=your-routemux-key
