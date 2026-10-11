@@ -15,7 +15,9 @@ inclusive no celular.
 | `get_video(job_id)` | Consulta o job. Quando termina, salva o MP4 no R2 e devolve a URL. |
 
 As imagens e os vídeos ficam no R2 com chave aleatória longa e são servidos pelo próprio Worker
-em `/img/<key>` e `/vid/<key>` (com suporte a Range). Imagens pequenas também voltam inline no chat.
+em `/img/<key>` e `/vid/<key>` (com suporte a Range). As imagens também voltam inline no chat:
+quando o original passa de 700 KB, vai uma prévia JPEG de até 1024 px feita pelo Cloudflare Images
+(5.000 transformações grátis por mês; acima disso volta só a URL, sem cobrança).
 
 ### Modelos de imagem
 

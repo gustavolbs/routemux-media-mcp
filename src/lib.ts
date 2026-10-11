@@ -1,6 +1,7 @@
 export interface Env {
   IMAGES: R2Bucket;
   AI: Ai;
+  RESIZER: ImagesBinding;
   SECRET: string;
   ROUTEMUX_KEY: string;
   ROUTEMUX_BASE_URL: string;

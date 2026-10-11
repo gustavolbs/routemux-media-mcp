@@ -23,8 +23,9 @@ const MODELS = {
 
 const FLUX_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 
-// Above this the base64 block gets too heavy for a chat tool result, so only the URL is returned.
+// A chat tool result is capped at about 1 MB, so heavier images go inline as a downscaled preview.
 const MAX_INLINE_BYTES = 700 * 1024;
+const PREVIEW_PIXELS = 1024;
 
 async function saveImage(env: Env, origin: string, bytes: Uint8Array) {
   const type = sniffImageType(bytes);
@@ -61,18 +62,36 @@ async function requestFluxImage(env: Env, prompt: string, size?: string): Promis
   return new Uint8Array(Buffer.from(output.image, "base64"));
 }
 
+// Returns the image itself when it is light enough, otherwise a smaller JPEG made by Cloudflare Images.
+async function inlineImage(env: Env, bytes: Uint8Array, mime: string) {
+  let data = bytes;
+  let mimeType = mime;
+  if (data.byteLength > MAX_INLINE_BYTES) {
+    try {
+      const resized = await env.RESIZER.input(new Blob([bytes]).stream())
+        .transform({ width: PREVIEW_PIXELS, height: PREVIEW_PIXELS, fit: "scale-down" })
+        .output({ format: "image/jpeg", quality: 80 });
+      data = new Uint8Array(await resized.response().arrayBuffer());
+      mimeType = "image/jpeg";
+    } catch {
+      return null; // No preview (for example, monthly free transformations used up): the URL still works.
+    }
+  }
+  if (data.byteLength > MAX_INLINE_BYTES) return null;
+  return { type: "image" as const, data: Buffer.from(data).toString("base64"), mimeType };
+}
+
 async function imageResult(env: Env, origin: string, bytes: Uint8Array): Promise<ToolResult> {
   const { url, mime } = await saveImage(env, origin, bytes);
   const result = text(url);
-  if (bytes.byteLength <= MAX_INLINE_BYTES) {
-    result.content.push({ type: "image", data: Buffer.from(bytes).toString("base64"), mimeType: mime });
-  }
+  const inline = await inlineImage(env, bytes, mime);
+  if (inline) result.content.push(inline);
   return result;
 }
 
 function createServer(env: Env, origin: string) {
   const server = new McpServer(
-    { name: "routemux-media", version: "1.4.0" },
+    { name: "routemux-media", version: "1.5.0" },
     {
       instructions: [
         "These tools cannot see images the user attaches in the chat: edit_image and create_video need image URLs.",
@@ -88,7 +107,7 @@ function createServer(env: Env, origin: string) {
     "generate_image",
     {
       description: [
-        "Generate an image from a text prompt. Returns a public URL (and the image inline when small enough). Takes up to a minute.",
+        "Generate an image from a text prompt. Returns the image inline (a preview when the original is large) plus the public URL of the full-size file. Takes up to a minute.",
         'Choosing the model: use "flux" for simple images with no text in them, such as illustrations, coloring pages, line art, backgrounds and quick drafts; it is nearly free.',
         'Use "flare" for anything with text or lettering, logos, precise layouts, realistic people, or when the user wants the best result; it costs about US$ 0.02 per image.',
         '"sunburst" costs the same as flare and is slower but more precise.',
@@ -119,7 +138,7 @@ function createServer(env: Env, origin: string) {
     "edit_image",
     {
       description:
-        "Edit an existing image following a text prompt. image_url can be any public image URL. For an image the user attached in the chat, get a URL first with get_upload_link. Returns a public URL (and the image inline when small enough).",
+        "Edit an existing image following a text prompt. image_url can be any public image URL. For an image the user attached in the chat, get a URL first with get_upload_link. Returns the image inline (a preview when the original is large) plus the public URL of the full-size file.",
       inputSchema: {
         prompt: z.string().describe("What to change in the image."),
         image_url: z.string().url().describe("URL of the image to edit (PNG, JPEG or WebP, up to 10 MB)."),
