@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { type Env, type ToolResult, asToolResult, loadSourceImage, randomKey, routemuxFetch, text } from "./lib";
+import { type Env, type ToolResult, asToolResult, randomKey, routemuxFetch, text } from "./lib";
 
 const VIDEO_MODELS = {
   hailuo: "minimax/minimax-hailuo-2.3",
@@ -16,18 +16,11 @@ type VideoInput = {
   seconds?: number;
   size?: string;
   ratio?: string;
-  first_frame_url?: string;
-  last_frame_url?: string;
-  reference_image_urls?: string[];
 };
 
 // Validates the options against what each model accepts and estimates the cost.
 function planVideo(input: VideoInput): { seconds: number; size: string; costUsd: number } {
   const size = (input.size ?? "768P").toUpperCase();
-  const references = input.reference_image_urls ?? [];
-  if (input.last_frame_url && !input.first_frame_url) {
-    throw new Error("last_frame_url needs first_frame_url as well.");
-  }
 
   if (input.model === "hailuo") {
     const seconds = input.seconds ?? 6;
@@ -35,9 +28,6 @@ function planVideo(input: VideoInput): { seconds: number; size: string; costUsd:
     if (size !== "768P" && size !== "1080P") throw new Error('hailuo accepts size = "768P" or "1080P".');
     if (size === "1080P" && seconds !== 6) throw new Error("hailuo at 1080P only supports 6 seconds.");
     if (input.ratio) throw new Error("ratio is only supported by h3.");
-    if (input.last_frame_url || references.length > 0) {
-      throw new Error("hailuo only supports first_frame_url. Use h3 for a last frame or reference images.");
-    }
     const costUsd = size === "1080P" || seconds === 10 ? 0.112 : 0.056;
     return { seconds, size, costUsd };
   }
@@ -58,21 +48,13 @@ async function createVideo(env: Env, origin: string, prompt: string, input: Vide
   const fields: Record<string, string | number> = { model: VIDEO_MODELS[input.model], prompt, seconds, size };
   if (input.ratio) fields.ratio = input.ratio;
 
-  const references = input.reference_image_urls ?? [];
-  let init: RequestInit;
-  if (input.first_frame_url || references.length > 0) {
-    // Image inputs go as multipart files, text-only jobs as JSON.
-    const form = new FormData();
-    for (const [name, value] of Object.entries(fields)) form.append(name, String(value));
-    if (input.first_frame_url) form.append("input_reference", await loadSourceImage(env, origin, input.first_frame_url));
-    if (input.last_frame_url) form.append("last_frame", await loadSourceImage(env, origin, input.last_frame_url));
-    for (const url of references) form.append("reference_images", await loadSourceImage(env, origin, url));
-    init = { method: "POST", body: form };
-  } else {
-    init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields) };
-  }
-
-  const job = (await (await routemuxFetch(env, "/videos", init)).json()) as { id?: string; status?: string };
+  // JSON only: RouteMux rejects multipart here and ignores image fields, so this is text-to-video.
+  const res = await routemuxFetch(env, "/videos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  const job = (await res.json()) as { id?: string; status?: string };
   if (!job.id) throw new Error("RouteMux accepted the request but returned no job id.");
   return text(
     [
@@ -170,7 +152,7 @@ export function registerVideoTools(server: McpServer, env: Env, origin: string) 
         "How to use: call create_video, tell the user the estimated cost, then call get_video with the job_id every 30 seconds or so until it returns a video URL.",
         "Each call is billed, so never submit the same job twice; poll the existing job_id instead.",
         'Models: "hailuo" (default) is cheap, about US$ 0.06 per video, good for tests and drafts. "h3" is expensive, US$ 0.08 per second or more (about US$ 0.40 for 5 s and US$ 1.20 for 15 s), so try the idea with hailuo first and only use h3 when the user asks for it.',
-        "Image URLs come from generate_image, edit_image or get_upload_link.",
+        "Text-to-video only: RouteMux does not accept image inputs (first frame, last frame, references) through its API yet.",
       ].join(" "),
       inputSchema: {
         prompt: z.string().describe("What happens in the video: subject, action, setting, camera movement, style."),
@@ -181,9 +163,6 @@ export function registerVideoTools(server: McpServer, env: Env, origin: string) 
           .optional()
           .describe('Resolution. hailuo: "768P" (default) or "1080P" (1080P only with 6 seconds). h3: "768P" (default) or "2K".'),
         ratio: z.string().optional().describe('h3 only: "16:9" (default), "9:16", "1:1", "4:3", "3:4" or "21:9".'),
-        first_frame_url: z.string().url().optional().describe("Image the video starts from (image-to-video)."),
-        last_frame_url: z.string().url().optional().describe("h3 only: image the video ends on. Needs first_frame_url."),
-        reference_image_urls: z.array(z.string().url()).optional().describe("h3 only: reference images to guide the video."),
       },
     },
     ({ prompt, ...input }) => asToolResult(() => createVideo(env, origin, prompt, input)),

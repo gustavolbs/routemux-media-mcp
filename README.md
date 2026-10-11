@@ -10,8 +10,8 @@ inclusive no celular.
 |---|---|
 | `generate_image(prompt, model?, size?, quality?)` | Gera uma imagem. `model`: `flare` (padrão, rápido) ou `sunburst` (mais preciso). |
 | `edit_image(prompt, image_url, model?)` | Edita uma imagem a partir de uma URL. Padrão `sunburst`. |
-| `get_upload_link()` | Devolve o link da página de upload, para mandar uma foto do celular. |
-| `create_video(prompt, model?, seconds?, size?, ratio?, first_frame_url?, last_frame_url?, reference_image_urls?)` | Cria um job de vídeo e devolve na hora o `job_id` e o custo estimado. |
+| `get_upload_link()` | Devolve o link de upload, usado para transformar uma foto anexada no chat em URL. |
+| `create_video(prompt, model?, seconds?, size?, ratio?)` | Cria um job de vídeo (texto→vídeo) e devolve na hora o `job_id` e o custo estimado. |
 | `get_video(job_id)` | Consulta o job. Quando termina, salva o MP4 no R2 e devolve a URL. |
 
 As imagens e os vídeos ficam no R2 com chave aleatória longa e são servidos pelo próprio Worker
@@ -25,12 +25,15 @@ em `/img/<key>` e `/vid/<key>` (com suporte a Range). Imagens pequenas também v
 | `seconds` | 6 (padrão) ou 10 | 4 a 15 (padrão 5) |
 | `size` | `768P` (padrão) ou `1080P` (só com 6 s) | `768P` (padrão) ou `2K` |
 | `ratio` | não tem | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9` |
-| Imagens | só `first_frame_url` | primeiro frame, último frame e referências |
-| Custo estimado | US$ 0,056 (768P, 6 s) | US$ 0,08/s em 768P, US$ 0,13/s em 2K |
+| Custo | US$ 0,056 (768P, 6 s), US$ 0,112 (10 s ou 1080P) | US$ 0,08/s em 768P, US$ 0,13/s em 2K |
 
 O vídeo é assíncrono: `create_video` devolve o `job_id` e o Claude consulta `get_video` até
 ficar pronto (alguns minutos). Um job que falha não é cobrado. Depois de salvo, `get_video`
 devolve sempre a mesma URL, sem baixar de novo.
+
+Só texto→vídeo: a API da RouteMux ainda não aceita imagem (primeiro frame, último frame,
+referências) nesses modelos. Ela recusa multipart e ignora campos de imagem no JSON, gerando e
+cobrando um vídeo só de texto.
 
 ## Setup
 
@@ -56,10 +59,19 @@ Se usar outro nome de bucket, troque também em `wrangler.jsonc`.
 Não há OAuth: o segredo no caminho é a autenticação. Quem tiver a URL usa sua key, então trate
 a URL como senha. Para trocar, rode `wrangler secret put SECRET` de novo e atualize o connector.
 
-## Mandar uma foto do celular
+## Foto anexada no chat
 
-Peça ao Claude o link de upload (`get_upload_link`), abra, envie a foto e cole no chat a URL
-`/img/...` que a página devolve. Aceita PNG, JPG e WebP até 10 MB.
+Uma tool de connector só recebe texto, então o Claude não consegue passar para ela a foto que
+você anexou. Há dois caminhos:
+
+1. **O Claude sobe a foto sozinho.** Com "Code execution and file creation" e "Allow network
+   egress" ligados em Settings → Capabilities, o Claude envia o anexo do sandbox dele para o
+   `/upload` e usa a URL. O servidor já instrui o Claude a tentar isso primeiro. Depende de o
+   sandbox conseguir acessar o domínio do Worker.
+2. **Página de upload.** Se o caminho 1 não estiver disponível, o Claude manda o link
+   (`get_upload_link`); você envia a foto por ali e cola no chat a URL `/img/...` devolvida.
+
+Aceita PNG, JPG e WebP até 10 MB.
 
 ## Teste local
 

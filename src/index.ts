@@ -54,7 +54,18 @@ async function imageResult(env: Env, origin: string, bytes: Uint8Array): Promise
 }
 
 function createServer(env: Env, origin: string) {
-  const server = new McpServer({ name: "routemux-media", version: "1.1.0" });
+  const server = new McpServer(
+    { name: "routemux-media", version: "1.2.0" },
+    {
+      instructions: [
+        "These tools cannot see images the user attaches in the chat: edit_image needs an image URL.",
+        "When the user attaches an image, upload it yourself if you have a code execution sandbox: call get_upload_link, then run",
+        '`curl -sS -F "file=@<path to the attachment>" "<upload link>"` (attachments are usually under /mnt/user-data/uploads)',
+        "and use the `url` field of the JSON reply as image_url. The upload takes PNG, JPEG or WebP up to 10 MB, so convert or downscale first if needed.",
+        "Only when you have no sandbox, cannot read the file, or the request is blocked, give the user the upload link and ask them to paste back the URL the page returns.",
+      ].join(" "),
+    },
+  );
 
   server.registerTool(
     "generate_image",
@@ -86,7 +97,7 @@ function createServer(env: Env, origin: string) {
     "edit_image",
     {
       description:
-        "Edit an existing image following a text prompt. image_url can be any public image URL, including one from get_upload_link. Returns a public URL (and the image inline when small enough).",
+        "Edit an existing image following a text prompt. image_url can be any public image URL. For an image the user attached in the chat, get a URL first with get_upload_link. Returns a public URL (and the image inline when small enough).",
       inputSchema: {
         prompt: z.string().describe("What to change in the image."),
         image_url: z.string().url().describe("URL of the image to edit (PNG, JPEG or WebP, up to 10 MB)."),
@@ -108,7 +119,7 @@ function createServer(env: Env, origin: string) {
     "get_upload_link",
     {
       description:
-        "Return the link to a page where the user can upload a photo from their device. The page gives back an image URL to use with edit_image or as a frame in create_video.",
+        'Return the upload link, used to turn an image attached in the chat into a URL for edit_image. Preferred: upload the attachment yourself from your code execution sandbox with `curl -sS -F "file=@<path>" "<link>"`; the JSON reply has the `url`. Fallback: the same link opens a page where the user can upload the photo and copy the URL. The link contains a secret, so only show it to the user when they need the fallback.',
       inputSchema: {},
     },
     async () => text(`${origin}/upload/${env.SECRET}`),
